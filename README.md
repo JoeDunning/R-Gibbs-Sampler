@@ -1,2 +1,2 @@
-# R---Gibbs-Sampler
+# R-Gibbs-Sampler
 Uses Metropolis-Hastings step 
