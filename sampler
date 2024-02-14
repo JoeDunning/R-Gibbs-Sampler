@@ -1,0 +1,145 @@
+## Gibbs sampler for R using metropolis step function to sample. This sampler relies on an included log density function.
+## No graph code is included 
+
+## This code be may re used, redistrubed and reimplemented freely under the CC0 1.0 Universal (CC0 1.0) Public Domain Dedication
+
+# ------------------------------------------------------------------------------------------------------------------------------
+
+
+## -- gibbsSampling Variable Setup
+final_index<-1         # int | Index sample output                    | Default: 1 | Current: 1
+thin_index<-1          # int | Counter for thinning factor k step     | Default: 1 | Current: 1
+#thin_kstep<-1         # int | Step iteration for thinning            | Default: 1, Modified: 5000   | DEFINED LOCALLY, HENCE #
+#burn_in<-20           # int | Burn in rate                           | Default: 0, Modified: 20     | DEFINED LOCALLY, HENCE #
+
+accept_rateA<-0        # int | Acceptance/Proposal Rate: a            | INIT DEF
+accept_rateB<-0        # int | Acceptance/Proposal Rate: b            | INIT DEF
+
+init_A<-1              # int | Initial Value: a                       | Default: 1 | Current: 1 
+init_B<-2              # int | Initial Value: b                       | Default: 2 | Current: 2
+
+std_A<-0.2             # float | Given SD (Standard Dev): A
+std_B<-0.2             # float | Given SD (Standard Dev): b
+
+n_samples<-5000        # int | Number of producable samples | Default: 5000, Modified: 5000 | Current Global: 5000
+
+## -- Log Density Observed: Variable Setup
+init_A<-1                             # int | Initial value: a  
+init_B<-2                             # int | Initial value: b  
+
+a_rng<-seq(0.01, init_A, by=0.01)     # Range: 0.01, init_A | Step: 0.01
+b_rng<-seq(0.01, init_B, by=0.01)     # Range: 0.01, init_B | Step: 0.01
+
+
+# ------------------------------------------------------------------------------------------------------------------------------
+
+
+## -- Log Density Observed | Function for calculating log of density given observed values
+log_density_observed <- function(a, b, data) {
+    density<-0 # Init density var
+    
+    # Loop over number of rows (nrows) in data (scores)
+    for (x in 1:nrow(data)) {
+        
+        pred_y<-data$y[x] # Observed Y
+        pred_n<-data$n[x] # Observed N
+        
+        # Calculate logarithm of beta function/distribution removed density +  at start
+        density<-density+lbeta(a+pred_y, b+pred_n-pred_y)-lbeta(a,b)
+        
+    }
+    return(density)
+}
+
+## -- Results
+#output_observed<-log_density_observed(a_rng, b_rng, scores)
+#output_observed
+
+
+
+## -- gibbsSampling Function(a, b, n_samples, burn_in) | Takes initial values and performs sampling over n range
+gibbsSampling <- function(a_curr, b_curr, std_A, std_B, n_samples, burn_in, kstep) {
+    
+    ## Proposed size and samples setup
+    prop_size<-floor((n_samples-burn_in)/kstep);
+
+    a_samples<-numeric(prop_size)         # A samples - a_samples
+    b_samples<-numeric(prop_size)         # B samples - b_samples
+   
+    ## Sample Loop - Step: 1, n_samples: Number of requested samples
+    for (i in 1:n_samples) {
+      
+        a_prop<-rnorm(1, mean=a_curr, sd=0.2) # Proposed Value - a
+        b_prop<-rnorm(1, mean=b_curr, sd=0.2) # Proposed Value - b
+          
+        ## Metropolis-Hastings Step - a
+        if (a_prop > 0) {
+            a_post_curr<-log_density_observed(a_curr, b_curr, scores)  # Current
+            a_post_prop<-log_density_observed(a_prop, b_curr, scores)  # Proposed 
+
+            a_ratio<-exp(a_post_prop-a_post_curr) # Acceptance Ratio - a
+            
+            # Check if sample is valid & within ratio
+            if (!is.nan(a_ratio) && runif(1) < a_ratio) {
+                # Assign proposed value & increase acceptance rate
+                a_curr<-a_prop              
+                accept_rateA<-accept_rateA+1
+            }
+        }
+
+        ## Metropolis-Hastings Step - b
+        if (b_prop > 0) {
+            b_post_curr<-log_density_observed(a_curr, b_curr, scores)  # Current
+            b_post_prop<-log_density_observed(a_curr, b_prop, scores)  # Proposed 
+
+            b_ratio<-exp(b_post_prop-b_post_curr) # Acceptance Ratio - b
+            
+            # Check if sample is valid & within ratio
+            if (!is.nan(b_ratio) && runif(1) < b_ratio) {
+                # Assign proposed value & increase acceptance rate
+                b_curr<-b_prop
+                accept_rateB<-accept_rateB+1
+            }
+        }
+    
+        # Store samples over burn_in rate & in respect to thinning factor 
+        # - burn_in: Burn in Rate
+        # - kstep/thin_kstep: Thinning Factor K-Step / Interval
+        # - final_index: Index for thinned samples
+        
+        if (i > burn_in && ((i-burn_in) %% kstep == 0)) {
+          a_samples[final_index]<-a_curr
+          b_samples[final_index]<-b_curr
+          final_index<-final_index+1
+        }
+    }
+  
+    # Calculate a & b acceptance rates
+    a_accept_out<-accept_rateA/(n_samples-burn_in)  # Store acceptance rate (a)
+    b_accept_out<-accept_rateB/(n_samples-burn_in)  # Store acceptance rate (b)
+  
+    # Return list() sample data & acceptance rates
+    return(list(a_samples=a_samples, 
+        b_samples=b_samples, 
+
+        a_accept_out=a_accept_out, 
+        b_accept_out=b_accept_out,
+
+        prop_size=prop_size))
+}
+
+## -- Results | samples
+
+# Given these three values, the proportionite sample size (prop_size) is calculated in the gibbsSampling method 
+# int kstep | Step iteration for thinning                                       | Default: 1,      Modified: 5000 | Current Global: 1
+# int n_samples | Number of producable samples                                  | Default: 5000,   Modified: 5000 | Current Global: 5000
+# int | Burn in rate                                                            | Default: 0,      Modified: 20 | Current Global: 5000
+
+samples_default<-gibbsSampling(init_A, init_B, std_A, std_B, 5000, 0, 1)        # DEFAULT Samples Call  | n_samples, burn_in, thinning
+samples_bt<-gibbsSampling(init_A, init_B, std_A, std_B, 5000, 20, 2)            # MODIFIED Samples Call | n_samples, burn_in, thinning
+
+# Print Proposed/Calculated Sizes based on thinning & burn in factors, 
+# For my default parameters, should be 5000 and 249 respectively
+
+samples_default$prop_size
+samples_bt$prop_size
